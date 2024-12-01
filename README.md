@@ -1,16 +1,19 @@
 <p align="center">
-  <h1>Labyrintho</h1>
-  <p align="center">
-    Labyrintho is a UI to apply segmentation in seismic facies
-  </p>
-  <p align="center">
-    <strong>Version 0.0.1</strong>
-  </p>
+  <img src="src/assets/logo.jpeg" alt="Labyrintho Logo" width="200" />
+</p>
+
+<h1 align="center">Labyrintho</h1>
+
+<p align="center">
+  Labyrintho is a UI to apply segmentation in seismic facies
+</p>
+<p align="center">
+  <strong>Version 0.0.1</strong>
 </p>
 
 ## About this project
 
-**Labyrintho** é uma interface de usuário (UI) desenvolvida para aplicar segmentação em fácies sísmicas. A ferramenta é destinada a profissionais da área de geofísica, facilitando a análise e segmentação de dados sísmicos, crucial para o entendimento das propriedades do subsolo e para a exploração de recursos naturais.
+**Labyrintho** is a user interface (UI) developed for seismic facies segmentation. This tool is a experiment for task of seismic segmentation, and in the future, can be auxiliate geophisics and students in this area.
 
 ## How to run
 1. Clone this repository:
