@@ -30,3 +30,5 @@
 - PyQt5
 - opencv-python
 - tifffile
+- torch
+- torchvision
