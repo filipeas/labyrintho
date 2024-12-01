@@ -15,9 +15,11 @@ from PyQt5.QtCore import Qt, QPoint
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 class MainInterface(QMainWindow):
-    def __init__(self):
+    def __init__(self, model):
         super().__init__()
         self.setWindowTitle("Labyrintho - Seismic Facies Segmentation Tool")
+        self.model = model
+        print("Camadas do modelo: ", self.model)
         self.setGeometry(100, 100, 1000, 600)
         
         # Variável para armazenar o tipo de prompt
@@ -46,6 +48,12 @@ class MainInterface(QMainWindow):
 
         self.graph_button = QPushButton("Selecionar Gráficos")
         self.graph_button.clicked.connect(self.open_graph_selector)
+
+        # Botão para realizar segmentação
+        self.segment_button = QPushButton("Realizar Segmentação")
+        self.segment_button.setStyleSheet("background-color: green; color: white;")
+        self.segment_button.setVisible(False)  # Inicialmente oculto
+        self.segment_button.clicked.connect(self.perform_segmentation)
         
         # ComboBox para selecionar prompt
         self.prompt_selector = QComboBox()
@@ -65,6 +73,7 @@ class MainInterface(QMainWindow):
         button_layout.addWidget(self.graph_button)
         button_layout.addWidget(self.graph_selector)
         button_layout.addWidget(self.prompt_selector)
+        button_layout.addWidget(self.segment_button)
         button_layout.addStretch()
         
         main_layout = QHBoxLayout()
@@ -78,6 +87,102 @@ class MainInterface(QMainWindow):
         # Adicionar captura de clique do mouse
         self.graphics_view.mousePressEvent = self.mouse_press_event
     
+    def update_button_visibility(self):
+        """Atualiza a visibilidade do botão de segmentação."""
+        if self.points_positive and len(self.points_positive) > 0 and hasattr(self, "gt_iou"):
+            self.segment_button.setVisible(True)
+        else:
+            self.segment_button.setVisible(False)
+    
+    def perform_segmentation(self):
+        """Executa a segmentação utilizando o modelo e salva métricas no log."""
+        if not self.points_positive:
+            print("Nenhum ponto positivo disponível.")
+            return
+        
+        if self.gt_iou is None:
+            print("Ground truth não carregado.")
+            return
+        
+        # preparando pontos e suas labels
+        point_coords = np.array(self.points_positive + self.points_negative)
+        point_labels = np.array([1] * len(self.points_positive) + [0] * len(self.points_negative))
+        print("Pontos:", point_coords.shape)
+        print("Labels:", point_labels.shape)
+
+        # no caso do sam, é passado a classe Predictor e não o modelo...
+        if self.image_array.dtype != np.uint8:
+            tiff_image = ((self.image_array - self.image_array.min()) / (self.image_array.max() - self.image_array.min()) * 255).astype(np.uint8)
+        else:
+            tiff_image = self.image_array
+        _, png_img = cv2.imencode('.png', tiff_image)
+        decoded_image = cv2.imdecode(np.frombuffer(png_img, np.uint8), cv2.IMREAD_UNCHANGED)
+        print(type(decoded_image), decoded_image.shape)
+
+        self.model.set_image(decoded_image)
+
+        # plotando
+        decoded_image = cv2.imdecode(png_img, cv2.IMREAD_UNCHANGED)
+        plt.figure(figsize=(10, 8))
+        plt.imshow(decoded_image, cmap='gray')
+        for (x, y), label in zip(point_coords, point_labels):
+            color = 'green' if label == 1 else 'red'
+            plt.scatter(x, y, color=color, label='Positive' if label == 1 else 'Negative')
+
+        # Configurar legendas
+        handles = [
+            plt.Line2D([0], [0], marker='o', color='w', label='Positive', markerfacecolor='green'),
+            plt.Line2D([0], [0], marker='o', color='w', label='Negative', markerfacecolor='red')
+        ]
+        plt.legend(handles=handles)
+        plt.axis('off')
+        plt.show()
+
+        # Preparar dados para o modelo
+        masks, scores, logits = self.model.predict(
+            point_coords=point_coords,
+            point_labels=point_labels,
+            multimask_output=True, # controla ambiguidade
+        )
+
+        print("masks shape: ", masks.shape)
+
+        # Criar subplots para exibir a imagem com todas as máscaras
+        num_masks = masks.shape[0]
+        fig, axes = plt.subplots(1, num_masks, figsize=(5 * num_masks, 5))
+
+        # Caso haja apenas uma máscara, torne 'axes' um array de um único elemento
+        if num_masks == 1:
+            axes = [axes]
+
+        # Plotar a imagem original e adicionar a máscara e os pontos sobre cada uma
+        for i, (mask, score, ax) in enumerate(zip(masks, scores, axes)):
+            ax.imshow(decoded_image, cmap='gray')  # Exibe a imagem original
+            ax.imshow(mask, cmap='jet', alpha=0.5)  # Exibe a máscara sobre a imagem
+            for (x, y), label in zip(point_coords, point_labels):
+                color = 'green' if label == 1 else 'red'
+                ax.scatter(x, y, color=color, label='Positive' if label == 1 else 'Negative')
+
+            # Título com o score da máscara
+            ax.set_title(f"Mask {i+1}\nScore: {score:.3f}", fontsize=12)
+            ax.axis('off')
+
+        # Ajuste para evitar sobreposição
+        plt.tight_layout()
+        plt.show()
+        
+        # # Calcular IoU
+        # output_mask = model_output['segmentation'].detach().numpy().round()
+        # iou_score = self.calculate_iou(output_mask, self.gt_iou)
+        
+        # # Log das métricas
+        # with open("segmentation_log.txt", "a") as log_file:
+        #     log_file.write(f"IoU: {iou_score}, "
+        #                    f"Pontos Positivos: {len(self.points_positive)}, "
+        #                    f"Pontos Negativos: {len(self.points_negative)}\n")
+        # print("Segmentação realizada com sucesso.")
+        # print(f"IoU: {iou_score}")
+
     def update_segmentation(self, x, y):
         """Atualiza a segmentação baseada no ponto positivo."""
         if self.image_array_gt is None:
@@ -349,6 +454,9 @@ class MainInterface(QMainWindow):
                 for point_list in [self.points_positive]:
                     for point in point_list:
                         self.update_segmentation(point[0], point[1])
+                
+                # carrega botão de segmentar
+                self.update_button_visibility()
             except Exception as e:
                 print(f"Erro ao carregar arquivos: {e}")
     
@@ -418,10 +526,12 @@ class MainInterface(QMainWindow):
             
             if self.current_prompt == "Pontos Positivos":
                 self.points_positive.append((x, y))  # Adiciona ponto positivo
+                self.update_button_visibility()
                 print(f"Ponto positivo adicionado em: ({x}, {y})")
                 self.update_segmentation(x, y)
             elif self.current_prompt == "Pontos Negativos":
                 self.points_negative.append((x, y))  # Adiciona ponto negativo
+
                 print(f"Ponto negativo adicionado em: ({x}, {y})")
             elif self.current_prompt == "Borracha":
                 self.erase_point(x, y)  # Remove o ponto mais próximo
