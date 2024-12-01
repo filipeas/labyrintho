@@ -18,7 +18,7 @@
 ## How to run
 1. Clone this repository:
    ```bash
-   git clone https://github.com/seu-usuario/Labyrintho.git
+   git clone https://github.com/filipeas/labyrintho.git
 
 2. Execute ``` setup.sh ``` to create a venv and install all dependences. This will create **labyrintho_env**.
 
