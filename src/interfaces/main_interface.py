@@ -200,19 +200,20 @@ class MainInterface(QMainWindow):
             self.previous_mask = np.zeros_like(self.image_array_gt, dtype=np.uint8)
         
         if not hasattr(self, 'pixel_values'):
-            self.pixel_values = []  # Lista para armazenar valores de pixel únicos
+            self.pixel_values = {}  # Lista para armazenar valores de pixel únicos
 
         # Verificar se a máscara atual é diferente da anterior
         if not np.array_equal(mask, self.previous_mask):
             # Somar as máscaras
             self.gt_iou = np.clip(self.previous_mask + mask, 0, 1)
             self.previous_mask = self.gt_iou  # Atualizar a máscara anterior
-
-            # Armazenar o valor de pixel único da máscara
-            if pixel_value not in self.pixel_values:
-                self.pixel_values.append(pixel_value)
         else:
             self.gt_iou = self.previous_mask  # Mantém a máscara atual
+        
+        # Armazenar o valor de pixel único da máscara
+        if pixel_value not in self.pixel_values:
+            self.pixel_values[pixel_value] = []
+        self.pixel_values[pixel_value].append((x,y))
 
         print("self.gt_iou shape: ", self.gt_iou.shape)
         print("self.gt_iou unique: ", np.unique(self.gt_iou))
@@ -222,7 +223,7 @@ class MainInterface(QMainWindow):
         plt.title("Máscara combinada do GT")
         plt.show()
 
-        img = self.remap_color_gt(remap=self.pixel_values)
+        img = self.remap_color_gt(remap=list(self.pixel_values.keys()))
         
         # Converter a imagem colorida para QImage
         qimg = QImage(img.data, img.shape[1], img.shape[0], img.strides[0], QImage.Format_RGB888)
@@ -531,7 +532,6 @@ class MainInterface(QMainWindow):
                 self.update_segmentation(x, y)
             elif self.current_prompt == "Pontos Negativos":
                 self.points_negative.append((x, y))  # Adiciona ponto negativo
-
                 print(f"Ponto negativo adicionado em: ({x}, {y})")
             elif self.current_prompt == "Borracha":
                 self.erase_point(x, y)  # Remove o ponto mais próximo
@@ -553,13 +553,15 @@ class MainInterface(QMainWindow):
 
         # Remover a região da máscara de gt_iou
         self.gt_iou = np.clip(self.gt_iou - mask_to_remove, 0, 1)
+        self.previous_mask = self.gt_iou  # Atualizar a máscara anterior
 
         # Remover o valor de pixel da lista de valores de pixel
-        if pixel_value in self.pixel_values:
-            self.pixel_values.remove(pixel_value)
+        if not self.pixel_values[pixel_value]:
+            del self.pixel_values[pixel_value]
         
         print("self.gt_iou shape: ", self.gt_iou.shape)
         print("self.gt_iou unique: ", np.unique(self.gt_iou))
+        print("XAMAMAMA 1: ", self.pixel_values)
 
         # Mostrar a máscara atualizada
         plt.imshow(self.gt_iou, cmap="gray")
@@ -567,7 +569,7 @@ class MainInterface(QMainWindow):
         plt.show()
         
         # Atualizar a imagem GT
-        img = self.remap_color_gt(remap=self.pixel_values)
+        img = self.remap_color_gt(remap=list(self.pixel_values.keys()))
 
         # Converter a imagem colorida para QImage
         qimg = QImage(img.data, img.shape[1], img.shape[0], img.strides[0], QImage.Format_RGB888)
@@ -590,6 +592,7 @@ class MainInterface(QMainWindow):
         """Remove o ponto mais próximo das listas e da imagem."""
         # Define a tolerância para encontrar o ponto mais próximo
         tolerance = 10  # Pixels
+        print("XAMAMAMA 2: ", self.pixel_values)
         
         """ esse loop é separado pois existe a regra erase_regions_event() que só pode ser aplicado aos pontos positivos """
         # Remove o ponto positivo mais próximo, se existir
@@ -597,9 +600,18 @@ class MainInterface(QMainWindow):
             for point in point_list:
                 if abs(point[0] - x) <= tolerance and abs(point[1] - y) <= tolerance:
                     point_list.remove(point)
-                    print(f"Ponto removido: {point}")
-                    self.update_image_with_points()
-                    self.erase_regions_event(x, y) # apagando regiao
+                    print(f"Ponto removido de points_positive: {point}")
+                    pixel_value = next((key for key, value in self.pixel_values.items() if point in value), None)
+                    if pixel_value is not None:
+                        # achou a key (nivel de cinza)
+                        self.pixel_values[pixel_value].remove(point)
+                        print(f"Ponto removido do pixel_value ({pixel_value}): {point}")
+
+                        if not self.pixel_values[pixel_value]:
+                            self.erase_regions_event(point[0], point[1]) # apagando regiao
+                            print(f"Região apagada para o ponto {point} no pixel_value {pixel_value}")
+                    
+                    # self.update_image_with_points() # Atualiza a imagem com os pontos modificados
                     return  # Remove apenas um ponto
         
         # Remove o ponto positivo mais próximo, se existir
@@ -607,8 +619,8 @@ class MainInterface(QMainWindow):
             for point in point_list:
                 if abs(point[0] - x) <= tolerance and abs(point[1] - y) <= tolerance:
                     point_list.remove(point)
-                    print(f"Ponto removido: {point}")
-                    self.update_image_with_points()
+                    print(f"Ponto removido de points_negative: {point}")
+                    # self.update_image_with_points()
                     return  # Remove apenas um ponto
     
     def update_image_with_points(self):
