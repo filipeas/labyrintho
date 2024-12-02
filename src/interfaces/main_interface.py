@@ -13,12 +13,16 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QImage
 from PyQt5.QtCore import Qt, QPoint
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import torch
+from torchmetrics import JaccardIndex
 
 class MainInterface(QMainWindow):
-    def __init__(self, model):
+    def __init__(self, model, device):
         super().__init__()
         self.setWindowTitle("Labyrintho - Seismic Facies Segmentation Tool")
         self.model = model
+        self.device = device
+
         print("Camadas do modelo: ", self.model)
         self.setGeometry(100, 100, 1000, 600)
         
@@ -107,8 +111,8 @@ class MainInterface(QMainWindow):
         # preparando pontos e suas labels
         point_coords = np.array(self.points_positive + self.points_negative)
         point_labels = np.array([1] * len(self.points_positive) + [0] * len(self.points_negative))
-        print("Pontos:", point_coords.shape)
-        print("Labels:", point_labels.shape)
+        # print("Pontos:", point_coords.shape)
+        # print("Labels:", point_labels.shape)
 
         # no caso do sam, é passado a classe Predictor e não o modelo...
         if self.image_array.dtype != np.uint8:
@@ -122,7 +126,7 @@ class MainInterface(QMainWindow):
         self.model.set_image(decoded_image)
 
         # plotando
-        decoded_image = cv2.imdecode(png_img, cv2.IMREAD_UNCHANGED)
+        # decoded_image = cv2.imdecode(png_img, cv2.IMREAD_UNCHANGED)
         plt.figure(figsize=(10, 8))
         plt.imshow(decoded_image, cmap='gray')
         for (x, y), label in zip(point_coords, point_labels):
@@ -142,10 +146,11 @@ class MainInterface(QMainWindow):
         masks, scores, logits = self.model.predict(
             point_coords=point_coords,
             point_labels=point_labels,
-            multimask_output=True, # controla ambiguidade
+            multimask_output=False, # controla ambiguidade
         )
 
-        print("masks shape: ", masks.shape)
+        # print("ground truth mask shape", self.gt_iou.shape, np.unique(self.gt_iou))
+        # print("predict masks shape: ", masks.shape, np.unique(masks.shape))
 
         # Criar subplots para exibir a imagem com todas as máscaras
         num_masks = masks.shape[0]
@@ -171,17 +176,28 @@ class MainInterface(QMainWindow):
         plt.tight_layout()
         plt.show()
         
-        # # Calcular IoU
-        # output_mask = model_output['segmentation'].detach().numpy().round()
-        # iou_score = self.calculate_iou(output_mask, self.gt_iou)
-        
+        # Calcular IoU
+        # Converta a máscara de predição e o ground truth para tensores PyTorch
+        gt_tensor = torch.tensor(self.gt_iou).to(self.device)  # Converta para tensor 2D e mova para GPU
+        pred_tensor = torch.tensor(masks.squeeze()).to(self.device)  # Remover a dimensão extra e mover para GPU
+        # print("shape gt_tensor: ", gt_tensor.shape)
+        # print("shape pred_tensor: ", pred_tensor.shape)
+        # Definir o número de classes (2 classes: fundo e objeto)
+        num_classes = 2
+
+        # Inicializar o JaccardIndex (IoU)
+        miou_metric = JaccardIndex(task="multiclass", num_classes=num_classes).to(self.device)
+        iou_score = miou_metric(pred_tensor, gt_tensor)
+
         # # Log das métricas
         # with open("segmentation_log.txt", "a") as log_file:
-        #     log_file.write(f"IoU: {iou_score}, "
+        #     log_file.write(f"IoU: {iou_score.item():.4f}, "
         #                    f"Pontos Positivos: {len(self.points_positive)}, "
         #                    f"Pontos Negativos: {len(self.points_negative)}\n")
         # print("Segmentação realizada com sucesso.")
-        # print(f"IoU: {iou_score}")
+        # print(f"IoU: {iou_score.item():.4f}")
+
+        self.save_image_and_points(save_segmentation=True, mask=pred_tensor, iou_score=iou_score.item())
 
     def update_segmentation(self, x, y):
         """Atualiza a segmentação baseada no ponto positivo."""
@@ -211,14 +227,14 @@ class MainInterface(QMainWindow):
             self.gt_iou = self.previous_mask  # Mantém a máscara atual
         
         # Armazenar o valor de pixel único da máscara
-        print("ala: pixel_value: ", pixel_value)
-        print("ala: self.pixel_values: ", self.pixel_values)
+        # print("ala: pixel_value: ", pixel_value)
+        # print("ala: self.pixel_values: ", self.pixel_values)
         if pixel_value not in self.pixel_values:
             self.pixel_values[pixel_value] = []
         self.pixel_values[pixel_value].append((x,y))
 
-        print("self.gt_iou shape: ", self.gt_iou.shape)
-        print("self.gt_iou unique: ", np.unique(self.gt_iou))
+        # print("self.gt_iou shape: ", self.gt_iou.shape)
+        # print("self.gt_iou unique: ", np.unique(self.gt_iou))
 
         # Mostrar a máscara atualizada
         plt.imshow(self.gt_iou, cmap="gray")
@@ -472,7 +488,7 @@ class MainInterface(QMainWindow):
             except Exception as e:
                 print(f"Erro ao carregar arquivos: {e}")
     
-    def save_image_and_points(self):
+    def save_image_and_points(self, save_segmentation=False, mask=None, iou_score=None):
         """Salva a imagem original, a imagem com os pontos e o arquivo JSON em uma pasta específica."""
         base_folder_path = QFileDialog.getExistingDirectory(self, "Selecionar Local para Salvar")
         if base_folder_path:
@@ -510,6 +526,29 @@ class MainInterface(QMainWindow):
                 json_file_path = os.path.join(save_folder, "marcacoes.json")
                 with open(json_file_path, "w") as json_file:
                     json.dump(points_data, json_file, indent=4)
+                
+                if save_segmentation and mask is not None:
+                    # salvar mascara
+                    mask_iou_path = os.path.join(save_folder, f"mask_segmentada_{iou_score:.4f}_{len(self.points_positive)}_{len(self.points_negative)}.png")
+                    cv2.imwrite(mask_iou_path, (mask * 255).cpu().numpy().astype(np.uint8))
+                    # Salvar pontos em JSON
+                    json_file_path = os.path.join(save_folder, "segmentacoes.json")
+                    if os.path.exists(json_file_path):
+                        with open(json_file_path, "r") as json_file:
+                            existing_data = json.load(json_file)
+                    else:
+                        existing_data = []
+
+                    result = {
+                        "iou": iou_score,
+                        "pontos_positivos": len(self.points_positive),
+                        "pontos_negativos": len(self.points_negative),
+                    }
+
+                    existing_data.append(result)
+
+                    with open(json_file_path, "w") as json_file:
+                        json.dump(existing_data, json_file, indent=4)
 
                 print(f"Arquivos salvos em: {save_folder}")
             else:

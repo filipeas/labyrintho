@@ -69,8 +69,16 @@ class MainApp(QApplication):
 
     def on_model_loaded(self):
         # Fecha a tela de splash e mostra a janela principal
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
+        print("device: ", device)
+
         self.splash.finish(self.splash)
-        self.main_window = MainInterface(model=self.model_loader_thread.predictor)
+        self.main_window = MainInterface(model=self.model_loader_thread.predictor, device=device)
         self.main_window.show()
 
 if __name__ == "__main__":
