@@ -34,6 +34,8 @@ class MainInterface(QMainWindow):
         # Variáveis de imagem
         self.pixmap_item = None  # Para exibir a imagem carregada
         self.gt_iou = None  # Imagem ddo ground truth para calcular iou
+        self.current_graph = None # controla o grafico atual
+        self.graph_window = None # janela do grafico
         
         # Área de exibição da imagem
         self.graphics_view = QGraphicsView(self)
@@ -50,8 +52,8 @@ class MainInterface(QMainWindow):
         self.save_button = QPushButton("Salvar Imagem e Pontos")
         self.save_button.clicked.connect(self.save_image_and_points)
 
-        self.graph_button = QPushButton("Selecionar Gráficos")
-        self.graph_button.clicked.connect(self.open_graph_selector)
+        # self.graph_button = QPushButton("Selecionar Gráficos")
+        # self.graph_button.clicked.connect(self.open_graph_selector)
 
         # Botão para realizar segmentação
         self.segment_button = QPushButton("Realizar Segmentação")
@@ -61,20 +63,20 @@ class MainInterface(QMainWindow):
         
         # ComboBox para selecionar prompt
         self.prompt_selector = QComboBox()
-        self.prompt_selector.addItems(["Selecione", "Pontos Positivos", "Pontos Negativos", "Borracha"])
+        self.prompt_selector.addItems(["Selecione o Prompt", "Pontos Positivos", "Pontos Negativos", "Borracha"])
         self.prompt_selector.currentIndexChanged.connect(self.set_prompt_type)
 
         # Seletor de gráficos
         self.graph_selector = QComboBox()
-        self.graph_selector.addItems(["Selecione", "IoU vs. Pontos", "Outro Gráfico"])
-        self.graph_selector.setVisible(False)
+        self.graph_selector.addItems(["Selecione o Gráfico", "IoU vs. Pontos", "Outro Gráfico"])
+        self.graph_selector.currentIndexChanged.connect(self.show_graph)
         
         # Layouts
         button_layout = QVBoxLayout()
         button_layout.addWidget(self.load_button)
         button_layout.addWidget(self.load_annotations_button)
         button_layout.addWidget(self.save_button)
-        button_layout.addWidget(self.graph_button)
+        # button_layout.addWidget(self.graph_button)
         button_layout.addWidget(self.graph_selector)
         button_layout.addWidget(self.prompt_selector)
         button_layout.addWidget(self.segment_button)
@@ -126,7 +128,7 @@ class MainInterface(QMainWindow):
         self.model.set_image(decoded_image)
 
         # plotando
-        # decoded_image = cv2.imdecode(png_img, cv2.IMREAD_UNCHANGED)
+        plt.clf()
         plt.figure(figsize=(10, 8))
         plt.imshow(decoded_image, cmap='gray')
         for (x, y), label in zip(point_coords, point_labels):
@@ -149,11 +151,9 @@ class MainInterface(QMainWindow):
             multimask_output=False, # controla ambiguidade
         )
 
-        # print("ground truth mask shape", self.gt_iou.shape, np.unique(self.gt_iou))
-        # print("predict masks shape: ", masks.shape, np.unique(masks.shape))
-
         # Criar subplots para exibir a imagem com todas as máscaras
         num_masks = masks.shape[0]
+        plt.clf()
         fig, axes = plt.subplots(1, num_masks, figsize=(5 * num_masks, 5))
 
         # Caso haja apenas uma máscara, torne 'axes' um array de um único elemento
@@ -227,16 +227,12 @@ class MainInterface(QMainWindow):
             self.gt_iou = self.previous_mask  # Mantém a máscara atual
         
         # Armazenar o valor de pixel único da máscara
-        # print("ala: pixel_value: ", pixel_value)
-        # print("ala: self.pixel_values: ", self.pixel_values)
         if pixel_value not in self.pixel_values:
             self.pixel_values[pixel_value] = []
         self.pixel_values[pixel_value].append((x,y))
 
-        # print("self.gt_iou shape: ", self.gt_iou.shape)
-        # print("self.gt_iou unique: ", np.unique(self.gt_iou))
-
         # Mostrar a máscara atualizada
+        plt.clf()
         plt.imshow(self.gt_iou, cmap="gray")
         plt.title("Máscara combinada do GT")
         plt.show()
@@ -562,12 +558,15 @@ class MainInterface(QMainWindow):
     
     def show_graph(self):
         """Abrir a tela para exibir o gráfico selecionado."""
-        graph_name = self.graph_selector.currentText()
-        if graph_name != "Selecione":  # Ignorar quando a opção "Selecione" está ativa
-            if self.graph_window:
-                self.graph_window.close()  # Fechar a janela anterior se existir
-            self.graph_window = GraphViewer(graph_name)  # Manter a referência
-            self.graph_window.show()
+        selected_graph = self.graph_selector.currentText()
+        if selected_graph == "Selecione o Gráfico":
+            return  # Não faz nada se a opção padrão for selecionada
+
+        if self.graph_window:
+            self.graph_window.close()  # Fecha a janela anterior, se existir
+
+        self.graph_window = GraphViewer(selected_graph)
+        self.graph_window.show()
     
     def mouse_press_event(self, event):
         """Captura o clique do mouse para adicionar pontos na imagem."""
@@ -610,11 +609,12 @@ class MainInterface(QMainWindow):
         if not self.pixel_values[pixel_value]:
             del self.pixel_values[pixel_value]
         
-        print("self.gt_iou shape: ", self.gt_iou.shape)
-        print("self.gt_iou unique: ", np.unique(self.gt_iou))
-        print("XAMAMAMA 1: ", self.pixel_values)
+        # print("self.gt_iou shape: ", self.gt_iou.shape)
+        # print("self.gt_iou unique: ", np.unique(self.gt_iou))
+        # print("XAMAMAMA 1: ", self.pixel_values)
 
         # Mostrar a máscara atualizada
+        plt.clf()
         plt.imshow(self.gt_iou, cmap="gray")
         plt.title("Máscara combinada do GT")
         plt.show()
@@ -652,9 +652,6 @@ class MainInterface(QMainWindow):
                     point_list.remove(point)
                     print(f"Ponto removido de points_positive: {point}")
                     
-                    print("Ponto a ser removido:", point, type(point))
-                    print("Pixel values atuais:", self.pixel_values)
-                    
                     pixel_value = None
                     for key, value in self.pixel_values.items():
                         for save_point in value:
@@ -667,9 +664,7 @@ class MainInterface(QMainWindow):
                     
                     if pixel_value is not None:
                         # achou a key (nivel de cinza)
-                        print("ANTES: ", self.pixel_values)
                         self.pixel_values[pixel_value].remove(tuple(point))
-                        print("DEPOIS: ", self.pixel_values)
                         print(f"Ponto removido do pixel_value ({pixel_value}): {point}")
 
                         if not self.pixel_values[pixel_value]:
@@ -733,28 +728,68 @@ class GraphViewer(QMainWindow):
         elif graph_name == "Outro Gráfico":
             self.plot_other_graph()
     
+    def read_json(self):
+        # Abre um diálogo para selecionar o arquivo JSON
+        file_path, _ = QFileDialog.getOpenFileName(self, "Selecione o arquivo JSON", "", "JSON Files (*.json)")
+        if not file_path:
+            return None
+
+        with open(file_path, "r") as file:
+            data = json.load(file)
+
+        # Remove duplicatas com base em tuplas únicas de (iou, pontos_positivos, pontos_negativos)
+        unique_data = list({(item["iou"], item["pontos_positivos"], item["pontos_negativos"]): item for item in data}.values())
+        return unique_data
+    
     def plot_iou_graph(self):
-        points = np.arange(1, 11)
-        iou = np.log(points) / np.log(10)
-        
+        data = self.read_json()
+        if data is None:
+            return
+
+        # Processar os dados para gráficos
+        pontos_positivos = []
+        pontos_negativos = []
+        iou_por_ponto_positivo = []
+        iou_por_ponto_negativo = []
+
+        for item in data:
+            pontos_positivos.append(item["pontos_positivos"])
+            pontos_negativos.append(item["pontos_negativos"])
+            iou_por_ponto_positivo.append(item["iou"])
+            iou_por_ponto_negativo.append(item["iou"])
+
+        # Garantir dados únicos
+        pontos_positivos = np.array(pontos_positivos)
+        pontos_negativos = np.array(pontos_negativos)
+        iou_por_ponto_positivo = np.array(iou_por_ponto_positivo)
+        iou_por_ponto_negativo = np.array(iou_por_ponto_negativo)
+
+        # Ordenar por pontos positivos
+        sorted_indices_positivos = np.argsort(pontos_positivos)
+        pontos_positivos = pontos_positivos[sorted_indices_positivos]
+        iou_por_ponto_positivo = iou_por_ponto_positivo[sorted_indices_positivos]
+
+        # Ordenar por pontos negativos
+        sorted_indices_negativos = np.argsort(pontos_negativos)
+        pontos_negativos = pontos_negativos[sorted_indices_negativos]
+        iou_por_ponto_negativo = iou_por_ponto_negativo[sorted_indices_negativos]
+
+        # Criar o gráfico
         self.canvas.figure.clear()
         ax = self.canvas.figure.add_subplot(111)
-        ax.plot(points, iou, marker='o', label="IoU")
-        ax.set_title("IoU vs. Pontos")
-        ax.set_xlabel("Pontos Adicionados")
+        
+        # Plotar IoU por pontos positivos
+        ax.plot(pontos_positivos, iou_por_ponto_positivo, marker='o', label="IoU por Pontos Positivos", color='blue')
+        
+        # Plotar IoU por pontos negativos
+        ax.plot(pontos_negativos, iou_por_ponto_negativo, marker='x', label="IoU por Pontos Negativos", color='red')
+        
+        # Personalização do gráfico
+        ax.set_title("IoU vs. Pontos Positivos e Negativos")
+        ax.set_xlabel("Pontos")
         ax.set_ylabel("IoU")
-        ax.legend()
+        ax.legend(loc='best')
         self.canvas.draw()
     
     def plot_other_graph(self):
-        x = np.linspace(0, 10, 100)
-        y = np.sin(x)
-        
-        self.canvas.figure.clear()
-        ax = self.canvas.figure.add_subplot(111)
-        ax.plot(x, y, marker='', label="Seno")
-        ax.set_title("Outro Gráfico")
-        ax.set_xlabel("Eixo X")
-        ax.set_ylabel("Eixo Y")
-        ax.legend()
-        self.canvas.draw()
+        pass
