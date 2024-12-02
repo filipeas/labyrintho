@@ -5,7 +5,7 @@
 <h1 align="center">Labyrintho</h1>
 
 <p align="center">
-  Labyrintho is a UI to apply segmentation in seismic facies
+  Labyrintho is a UI to make segmentation in seismic facies
 </p>
 <p align="center">
   <strong>Version 0.0.1</strong>
