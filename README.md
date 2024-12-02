@@ -24,6 +24,10 @@
 
 3. Set labyrintho's env and run ``` python main.py ```.
 
+4. We're currently using [SAM (Segment Anything Model)](https://github.com/facebookresearch/segment-anything) as a base for segmentation. This project have the objetive realize segmentation with prompts, so the program have tool for apply prompts. Because of this, we need download and set checkpoints of SAM into **src/models/segment_anything/checkpoints**. Download some of the versions of ViT (in repository of the SAM) and paste into **src/models/segment_anything/checkpoints**. Then, open **main.py** and set vit_model and checkpoint in function **__init__** in **MainApp()** class.
+- For exemple, if you [download vit_b](https://github.com/facebookresearch/segment-anything?tab=readme-ov-file#model-checkpoints), paste the file into **src/models/segment_anything/checkpoints** and open **main.py**, go to **__init__** in **MainApp()** and change flag **model_type** to vit_b and **checkpoint** to path where have the correct checkpoint.
+
+
 ### Requirements
 - numpy
 - matplotlib
