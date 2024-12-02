@@ -211,6 +211,8 @@ class MainInterface(QMainWindow):
             self.gt_iou = self.previous_mask  # Mantém a máscara atual
         
         # Armazenar o valor de pixel único da máscara
+        print("ala: pixel_value: ", pixel_value)
+        print("ala: self.pixel_values: ", self.pixel_values)
         if pixel_value not in self.pixel_values:
             self.pixel_values[pixel_value] = []
         self.pixel_values[pixel_value].append((x,y))
@@ -447,6 +449,15 @@ class MainInterface(QMainWindow):
                         self.points_negative = points_data.get("pontos_negativos", [])
                     
                     self.update_image_with_points()
+
+                    # self.pixel_values = {}
+                    # for point_list in [self.points_positive]:
+                    #     for point in point_list:
+                    #         pixel_value = self.image_array_gt[point[1], point[0]]
+                    #         if pixel_value not in self.pixel_values:
+                    #             self.pixel_values[pixel_value] = []
+                    #         self.pixel_values[pixel_value].append((point[0], point[1]))
+                    # print("XAMAMAMA no load_annotations(): ", self.pixel_values)
                     print("Marcações carregadas com sucesso.")
                 else:
                     print("Arquivo JSON não encontrado.")
@@ -539,6 +550,7 @@ class MainInterface(QMainWindow):
                 print(f"Tipo de prompt não suportado: {self.current_prompt}")
                 
             self.update_image_with_points()
+            print("XAMAMAMA no mouse_press_event(): ", self.pixel_values)
     
     def erase_regions_event(self, x, y):
         if self.image_array_gt is None:
@@ -592,7 +604,6 @@ class MainInterface(QMainWindow):
         """Remove o ponto mais próximo das listas e da imagem."""
         # Define a tolerância para encontrar o ponto mais próximo
         tolerance = 10  # Pixels
-        print("XAMAMAMA 2: ", self.pixel_values)
         
         """ esse loop é separado pois existe a regra erase_regions_event() que só pode ser aplicado aos pontos positivos """
         # Remove o ponto positivo mais próximo, se existir
@@ -601,10 +612,25 @@ class MainInterface(QMainWindow):
                 if abs(point[0] - x) <= tolerance and abs(point[1] - y) <= tolerance:
                     point_list.remove(point)
                     print(f"Ponto removido de points_positive: {point}")
-                    pixel_value = next((key for key, value in self.pixel_values.items() if point in value), None)
+                    
+                    print("Ponto a ser removido:", point, type(point))
+                    print("Pixel values atuais:", self.pixel_values)
+                    
+                    pixel_value = None
+                    for key, value in self.pixel_values.items():
+                        for save_point in value:
+                            print(save_point, type(save_point))
+                            if tuple(point) == save_point:
+                                pixel_value = key
+                                break
+                    
+                    print("Pixel value achado: ", pixel_value)
+                    
                     if pixel_value is not None:
                         # achou a key (nivel de cinza)
-                        self.pixel_values[pixel_value].remove(point)
+                        print("ANTES: ", self.pixel_values)
+                        self.pixel_values[pixel_value].remove(tuple(point))
+                        print("DEPOIS: ", self.pixel_values)
                         print(f"Ponto removido do pixel_value ({pixel_value}): {point}")
 
                         if not self.pixel_values[pixel_value]:
