@@ -128,21 +128,21 @@ class MainInterface(QMainWindow):
         self.model.set_image(decoded_image)
 
         # plotando
-        plt.clf()
-        plt.figure(figsize=(10, 8))
-        plt.imshow(decoded_image, cmap='gray')
-        for (x, y), label in zip(point_coords, point_labels):
-            color = 'green' if label == 1 else 'red'
-            plt.scatter(x, y, color=color, label='Positive' if label == 1 else 'Negative')
+        # plt.clf()
+        # plt.figure(figsize=(10, 8))
+        # plt.imshow(decoded_image, cmap='gray')
+        # for (x, y), label in zip(point_coords, point_labels):
+        #     color = 'green' if label == 1 else 'red'
+        #     plt.scatter(x, y, color=color, label='Positive' if label == 1 else 'Negative')
 
-        # Configurar legendas
-        handles = [
-            plt.Line2D([0], [0], marker='o', color='w', label='Positive', markerfacecolor='green'),
-            plt.Line2D([0], [0], marker='o', color='w', label='Negative', markerfacecolor='red')
-        ]
-        plt.legend(handles=handles)
-        plt.axis('off')
-        plt.show()
+        # # Configurar legendas
+        # handles = [
+        #     plt.Line2D([0], [0], marker='o', color='w', label='Positive', markerfacecolor='green'),
+        #     plt.Line2D([0], [0], marker='o', color='w', label='Negative', markerfacecolor='red')
+        # ]
+        # plt.legend(handles=handles)
+        # plt.axis('off')
+        # plt.show()
 
         # Preparar dados para o modelo
         masks, scores, logits = self.model.predict(
@@ -189,14 +189,6 @@ class MainInterface(QMainWindow):
         miou_metric = JaccardIndex(task="multiclass", num_classes=num_classes).to(self.device)
         iou_score = miou_metric(pred_tensor, gt_tensor)
 
-        # # Log das métricas
-        # with open("segmentation_log.txt", "a") as log_file:
-        #     log_file.write(f"IoU: {iou_score.item():.4f}, "
-        #                    f"Pontos Positivos: {len(self.points_positive)}, "
-        #                    f"Pontos Negativos: {len(self.points_negative)}\n")
-        # print("Segmentação realizada com sucesso.")
-        # print(f"IoU: {iou_score.item():.4f}")
-
         self.save_image_and_points(save_segmentation=True, mask=pred_tensor, iou_score=iou_score.item())
 
     def update_segmentation(self, x, y):
@@ -238,7 +230,7 @@ class MainInterface(QMainWindow):
         plt.show()
 
         img = self.remap_color_gt(remap=list(self.pixel_values.keys()))
-        
+
         # Converter a imagem colorida para QImage
         qimg = QImage(img.data, img.shape[1], img.shape[0], img.strides[0], QImage.Format_RGB888)
 
@@ -247,7 +239,18 @@ class MainInterface(QMainWindow):
         if hasattr(self, 'gt_pixmap_item') and self.gt_pixmap_item:
             self.scene.removeItem(self.gt_pixmap_item)  # Remove o antigo item GT
         self.gt_pixmap_item = QGraphicsPixmapItem(pixmap)
-        self.gt_pixmap_item.setOffset(0, self.pixmap_item.pixmap().height())  # Ajusta a posição abaixo da imagem original
+        
+        # Verificar a orientação da imagem original
+        img_width = self.pixmap_item.pixmap().width()
+        img_height = self.pixmap_item.pixmap().height()
+
+        if img_height > img_width:  # Imagem maior na vertical
+            # Posicionar o GT à direita da imagem
+            self.gt_pixmap_item.setOffset(img_width, 0)
+        else:  # Imagem maior na horizontal
+            # Posicionar o GT abaixo da imagem
+            self.gt_pixmap_item.setOffset(0, img_height)
+
         self.scene.addItem(self.gt_pixmap_item)
 
         # Atualizar a visualização para manter o aspecto
@@ -260,6 +263,17 @@ class MainInterface(QMainWindow):
     
     def load_image(self):
         """Carregar uma imagem e exibi-la na área de visualização."""
+
+        # resetando variaveis
+        self.points_positive = []
+        self.points_negative = []
+        self.pixmap_item = None
+        self.gt_iou = None
+        self.current_graph = None
+        self.graph_window = None
+        self.previous_mask = None
+        self.pixel_values = {}
+
         file_path, _ = QFileDialog.getOpenFileName(self, "Selecionar Imagem", "", "Imagens (*.tiff *.tif *.png *.jpg *.jpeg *.bmp)")
         if file_path:
             try:
@@ -334,7 +348,9 @@ class MainInterface(QMainWindow):
         if file_path:
             try:
                 # Carregar a imagem usando OpenCV
-                self.image_array_gt = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)  # Carrega em escala de cinza
+                self.image_array_gt = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
+                print("Níveis de cinza detectados: ", np.unique(self.image_array_gt))
+                
                 # Salvar o caminho do arquivo original e sua extensão
                 self.original_file_path_gt = file_path
                 self.original_file_extension_gt = os.path.splitext(file_path)[1]
@@ -380,11 +396,34 @@ class MainInterface(QMainWindow):
     
     def load_annotations(self):
         """Carrega a imagem original e as marcações de uma pasta."""
+
+        # resetando variaveis
+        self.points_positive = []
+        self.points_negative = []
+        self.pixmap_item = None
+        self.gt_iou = None
+        self.current_graph = None
+        self.graph_window = None
+        self.previous_mask = None
+        self.pixel_values = {}
+        
         folder_path = QFileDialog.getExistingDirectory(self, "Selecionar Pasta com Arquivos")
         if folder_path:
             try:
-                # Carregar imagem original
-                original_image_path = os.path.join(folder_path, "imagem_original.tiff")
+                # Verificar se a imagem original existe
+                possible_extensions = ["imagem_original.tiff", "imagem_original.tif"]
+                original_image_path = None
+                
+                for ext in possible_extensions:
+                    path = os.path.join(folder_path, ext)
+                    if os.path.exists(path):
+                        original_image_path = path
+                        break
+                
+                if original_image_path:
+                    self.image_array = tiff.imread(original_image_path)
+                else:
+                    print("Nenhuma imagem original encontrada com as extensões .tiff ou .tif.")
                 if os.path.exists(original_image_path):
                     self.image_array = tiff.imread(original_image_path)
                     img = self.image_array
@@ -410,7 +449,8 @@ class MainInterface(QMainWindow):
                 # Carregar GT
                 original_image_path_gt = os.path.join(folder_path, "gt.png")
                 if os.path.exists(original_image_path_gt):
-                    self.image_array_gt = cv2.imread(original_image_path_gt, cv2.IMREAD_GRAYSCALE)  # Carrega em escala de cinza
+                    self.image_array_gt = cv2.imread(original_image_path_gt, cv2.IMREAD_UNCHANGED)
+                    print("Níveis de cinza detectados: ", np.unique(self.image_array_gt))
                     # Salvar o caminho do arquivo original e sua extensão
                     self.original_file_path_gt = original_image_path_gt
                     self.original_file_extension_gt = os.path.splitext(original_image_path_gt)[1]
@@ -462,14 +502,6 @@ class MainInterface(QMainWindow):
                     
                     self.update_image_with_points()
 
-                    # self.pixel_values = {}
-                    # for point_list in [self.points_positive]:
-                    #     for point in point_list:
-                    #         pixel_value = self.image_array_gt[point[1], point[0]]
-                    #         if pixel_value not in self.pixel_values:
-                    #             self.pixel_values[pixel_value] = []
-                    #         self.pixel_values[pixel_value].append((point[0], point[1]))
-                    # print("XAMAMAMA no load_annotations(): ", self.pixel_values)
                     print("Marcações carregadas com sucesso.")
                 else:
                     print("Arquivo JSON não encontrado.")
@@ -588,7 +620,6 @@ class MainInterface(QMainWindow):
                 print(f"Tipo de prompt não suportado: {self.current_prompt}")
                 
             self.update_image_with_points()
-            print("XAMAMAMA no mouse_press_event(): ", self.pixel_values)
     
     def erase_regions_event(self, x, y):
         if self.image_array_gt is None:
@@ -608,10 +639,6 @@ class MainInterface(QMainWindow):
         # Remover o valor de pixel da lista de valores de pixel
         if not self.pixel_values[pixel_value]:
             del self.pixel_values[pixel_value]
-        
-        # print("self.gt_iou shape: ", self.gt_iou.shape)
-        # print("self.gt_iou unique: ", np.unique(self.gt_iou))
-        # print("XAMAMAMA 1: ", self.pixel_values)
 
         # Mostrar a máscara atualizada
         plt.clf()
@@ -630,7 +657,18 @@ class MainInterface(QMainWindow):
         if hasattr(self, 'gt_pixmap_item') and self.gt_pixmap_item:
             self.scene.removeItem(self.gt_pixmap_item)  # Remove o antigo item GT
         self.gt_pixmap_item = QGraphicsPixmapItem(pixmap)
-        self.gt_pixmap_item.setOffset(0, self.pixmap_item.pixmap().height())  # Ajusta a posição abaixo da imagem original
+        
+        # Verificar a orientação da imagem original
+        img_width = self.pixmap_item.pixmap().width()
+        img_height = self.pixmap_item.pixmap().height()
+
+        if img_height > img_width:  # Imagem maior na vertical
+            # Posicionar o GT à direita da imagem
+            self.gt_pixmap_item.setOffset(img_width, 0)
+        else:  # Imagem maior na horizontal
+            # Posicionar o GT abaixo da imagem
+            self.gt_pixmap_item.setOffset(0, img_height)
+        
         self.scene.addItem(self.gt_pixmap_item)
 
         # Atualizar a visualização para manter o aspecto
