@@ -48,7 +48,7 @@ class MainApp(QApplication):
     def __init__(self, sys_argv):
         super().__init__(sys_argv)
         
-        splash_pix = QPixmap('src/assets/logo.jpeg').scaled(400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)  
+        splash_pix = QPixmap('src/assets/logo.png').scaled(400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)  
         self.splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
         self.splash.show()
 
