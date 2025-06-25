@@ -14,6 +14,7 @@ from src.ui.mask_selection_window import MaskSelectionWindow
 from src.controllers.image_loader import ImageLoader
 from src.controllers.point_manager import PointManager
 from src.controllers.segmenter import Segmenter
+from src.ui.hypotheses_window import HypothesesWindow
 
 
 class FaciesSegmentationTab(QWidget):
@@ -188,16 +189,23 @@ class FaciesSegmentationTab(QWidget):
         offset = 30  # distância entre janelas
 
         # Abre janelas com as hipóteses (1 ou 3, depende do multimask_output)
-        for i in range(masks_logits.shape[1]):
-            window = MaskSelectionWindow(
-                index=i,
-                base_image_np=base_image,
-                mask_logit_tensor=masks_logits[0, i],
-                callback_on_select=on_select,
-            )
-            window.move(start_x + i * (600 + offset), start_y)  # lado a lado
-            window.show()
-            self.mask_windows.append(window)
+        # for i in range(masks_logits.shape[1]):
+        #     window = MaskSelectionWindow(
+        #         index=i,
+        #         base_image_np=base_image,
+        #         mask_logit_tensor=masks_logits[0, i],
+        #         callback_on_select=on_select,
+        #     )
+        #     window.move(start_x + i * (600 + offset), start_y)  # lado a lado
+        #     window.show()
+        #     self.mask_windows.append(window)
+        window = HypothesesWindow(
+            base_image=base_image,
+            masks_logits=masks_logits[0],  # [3, H, W]
+            callback_on_select=on_select,
+        )
+        window.show()
+        self.mask_windows.append(window)
 
     def reset(self):
         self.scene.clear()
