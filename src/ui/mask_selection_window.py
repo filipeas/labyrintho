@@ -1,9 +1,18 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QSizePolicy, QScrollArea, QApplication
+from PyQt5.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QScrollArea,
+    QApplication,
+)
 from PyQt5.QtGui import QImage, QPixmap, QWheelEvent
 from PyQt5.QtCore import Qt, QObject, QEvent
 import numpy as np
 import torch
 import cv2
+
 
 class MaskSelectionWindow(QWidget):
     def __init__(self, index, base_image_np, mask_logit_tensor, callback_on_select):
@@ -39,7 +48,7 @@ class MaskSelectionWindow(QWidget):
         self.setLayout(layout)
 
         self.update_overlay()
-    
+
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         # Intercepta o scroll no viewport
         if event.type() == QEvent.Type.Wheel:
@@ -50,25 +59,32 @@ class MaskSelectionWindow(QWidget):
                 # Scroll com Alt → muda threshold, bloqueia scroll
                 steps = wheel_event.angleDelta().y() // 120
                 if steps != 0:
-                    self.threshold = round(np.clip(self.threshold + 0.1 * steps, 0.0, 1.0), 1)
+                    self.threshold = round(
+                        np.clip(self.threshold + 0.1 * steps, 0.0, 1.0), 1
+                    )
                     self.update_overlay()
                 return True  # ← impede propagação para o scroll
 
         return super().eventFilter(obj, event)
-    
+
     def update_overlay(self):
         # Aplica sigmoid + threshold
         mask_prob = torch.sigmoid(self.mask_logit)
         binary_mask = (mask_prob > self.threshold).numpy().astype(np.uint8)
 
-        mask_resized = cv2.resize(binary_mask, (self.original_image.shape[1], self.original_image.shape[0]),
-                                  interpolation=cv2.INTER_NEAREST)
+        mask_resized = cv2.resize(
+            binary_mask,
+            (self.original_image.shape[1], self.original_image.shape[0]),
+            interpolation=cv2.INTER_NEAREST,
+        )
 
         overlay = self.original_image.copy()
         overlay[mask_resized == 1] = [255, 0, 0]
 
         alpha = 0.5
-        combined = (alpha * overlay + (1 - alpha) * self.original_image).astype(np.uint8)
+        combined = (alpha * overlay + (1 - alpha) * self.original_image).astype(
+            np.uint8
+        )
 
         # Converte imagem para QPixmap
         h, w, c = combined.shape

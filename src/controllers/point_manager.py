@@ -13,7 +13,7 @@ class PointManager:
 
     def clear(self):
         self.points.clear()
-    
+
     def undo_last_point(self):
         if self.points:
             p = self.points.pop()

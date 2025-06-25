@@ -5,10 +5,11 @@ from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtGui import QPixmap, QImage
 from minerva.data.readers import TiffReader, PNGReader
 
+
 class ImageLoader:
     def __init__(self):
         self.last_image_array: Optional[np.ndarray] = None
-    
+
     def load_image(self) -> QPixmap:
         path_str, _ = QFileDialog.getOpenFileName(
             None, "Abrir Imagem", "", "Imagens (*.png *.tif *.tiff)"
@@ -40,9 +41,9 @@ class ImageLoader:
                 # return pixmap
             else:
                 raise ValueError("Formato não suportado.")
-            
+
             self.last_image_array = image_np.copy()
-            
+
             image_vis = self.process_image_to_scene(image_np)
 
             h, w, ch = image_vis.shape
@@ -53,7 +54,7 @@ class ImageLoader:
         except Exception as e:
             print(f"[Erro ao carregar imagem com Minerva]: {e}")
             return None
-    
+
     def process_image_to_scene(self, image_np):
         # only for presentation: convert to uint8 RGB
         image_vis = image_np

@@ -3,8 +3,8 @@ import json
 import torch
 import traceback
 from pathlib import Path
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtGui import QPixmap, QPainter, QFont, QColor
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRect
 from src.ui.main_interface import MainInterface
 from src.models.segment_anything.model_instantiator import SAM_Instantiator
 from PyQt5.QtWidgets import QApplication, QSplashScreen, QMessageBox
@@ -54,9 +54,11 @@ class LoadModelThread(QThread):
             pixel_mean=self.config["pixel_mean"],
             pixel_std=self.config["pixel_std"],
         )
+        """ use this for load original SAM weights"""
         # self.model = model_instantiator.create_model_and_load_backbone(
         #     backbone_checkpoint_path=self.config["backbone_checkpoint_path"]
         # ).to(device)
+        """ use this for load finetuned weights """
         self.model = model_instantiator.load_model_from_checkpoint(
             checkpoint_path=self.config["load_model_from_checkpoint"],
             return_prediction_only=False
@@ -68,9 +70,8 @@ class MainApp(QApplication):
         super().__init__(sys_argv)
 
         try:
-            splash_pix = QPixmap("src/assets/logo.png").scaled(
-                400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
+            # Criar o splash com o título
+            splash_pix = self.create_splash_with_title("src/assets/logo.png", "Minerva Segmenter")
             self.splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
             self.splash.show()
 
@@ -84,6 +85,47 @@ class MainApp(QApplication):
             self.model_loader_thread.start()
         except Exception as e:
             self.show_error(f"Erro ao iniciar aplicação: {str(e)}")
+    
+    def create_splash_with_title(self, image_path, title):
+        # Carregar a imagem original
+        original_pixmap = QPixmap(image_path)
+        if original_pixmap.isNull():
+            raise ValueError(f"Não foi possível carregar a imagem: {image_path}")
+
+        # Redimensionar a imagem original conforme necessário
+        scaled_pixmap = original_pixmap.scaled(
+            400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+
+        # Definir a altura adicional para o texto (por exemplo, 50 pixels)
+        text_height = 50
+        # Criar um novo QPixmap com altura adicional para o texto
+        new_width = scaled_pixmap.width()
+        new_height = scaled_pixmap.height() + text_height
+        new_pixmap = QPixmap(new_width, new_height)
+        new_pixmap.fill(Qt.transparent)  # Preencher com transparente (ou outra cor de fundo)
+
+        # Criar um QPainter para desenhar no novo QPixmap
+        painter = QPainter(new_pixmap)
+        # Desenhar a imagem redimensionada no topo
+        painter.drawPixmap(0, 0, scaled_pixmap)
+
+        # Configurar a fonte e a cor do texto
+        font = QFont()
+        font.setPointSize(14)  # Tamanho da fonte
+        font.setBold(True)     # Negrito
+        painter.setFont(font)
+        painter.setPen(QColor(Qt.white))  # Cor do texto
+
+        # Desenhar o texto abaixo da imagem
+        # Centralizar o texto horizontalmente
+        text_rect = QRect(0, scaled_pixmap.height(), new_width, text_height)
+        painter.drawText(text_rect, Qt.AlignCenter, title)
+
+        # Finalizar o desenho
+        painter.end()
+
+        return new_pixmap
 
     def update_splash_progress(self, progress):
         # Atualiza a barra de progresso na tela de splash

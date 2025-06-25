@@ -9,6 +9,7 @@ from minerva.models.nets.image.sam import Sam
 from minerva.models.finetune_adapters import LoRA
 from minerva.pipelines.experiment import ModelInstantiator
 
+
 class SAM_Instantiator(ModelInstantiator):
     def __init__(
         self,
@@ -26,7 +27,7 @@ class SAM_Instantiator(ModelInstantiator):
         pixel_mean: Optional[List[float]] = None,
         pixel_std: Optional[List[float]] = None,
         treat_as_binary: bool = True,
-        automatic_optimization: bool = True
+        automatic_optimization: bool = True,
     ):
         self.num_classes = num_classes
         self.vit_type = vit_type
@@ -43,15 +44,17 @@ class SAM_Instantiator(ModelInstantiator):
         self.pixel_std = pixel_std
         self.treat_as_binary = treat_as_binary
         self.automatic_optimization = automatic_optimization
-    
+
     def _get_jaccard_metric(self):
         if self.treat_as_binary:
             return JaccardIndex(task="binary")
         else:
             return JaccardIndex(task="multiclass", num_classes=self.num_classes)
-    
+
     def _create_model(
-        self, ckpt: Optional[str] = None, return_prediction_only: bool = False,
+        self,
+        ckpt: Optional[str] = None,
+        return_prediction_only: bool = False,
     ) -> L.LightningModule:
         return Sam(
             vit_type=self.vit_type,
@@ -73,7 +76,7 @@ class SAM_Instantiator(ModelInstantiator):
             train_metrics={"mIoU": self._get_jaccard_metric()},
             val_metrics={"mIoU": self._get_jaccard_metric()},
             test_metrics={"mIoU": self._get_jaccard_metric()},
-            automatic_optimization=self.automatic_optimization
+            automatic_optimization=self.automatic_optimization,
         )
 
     def create_model_randomly_initialized(self) -> L.LightningModule:
@@ -89,7 +92,9 @@ class SAM_Instantiator(ModelInstantiator):
     def load_model_from_checkpoint(
         self, checkpoint_path: PathLike, return_prediction_only: bool = True
     ) -> L.LightningModule:
-        model = self._create_model(ckpt=None, return_prediction_only=return_prediction_only)
+        model = self._create_model(
+            ckpt=None, return_prediction_only=return_prediction_only
+        )
 
         return FromPretrained(
             model,
