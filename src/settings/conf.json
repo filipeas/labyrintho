@@ -1,0 +1,12 @@
+{
+    "multimask_output": true,
+    "num_classes": 3,
+    "num_facies": 6,
+    "load_model_from_checkpoint": "src/models/segment_anything/checkpoints/min_val_loss.ckpt",
+    "backbone_checkpoint_path": "src/models/segment_anything/checkpoints/sam_vit_b_01ec64.pth",
+    "vit_type": "vit-b",
+    "pixel_mean": [0.0, 0.0, 0.0],
+    "pixel_std": [1.0, 1.0, 1.0],
+    "width": 590,
+    "height": 1006
+}

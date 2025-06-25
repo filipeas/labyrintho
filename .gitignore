@@ -1,4 +1,10 @@
-labyrintho_env
+# folders
 __pycache__
 .DS_Store
-checkpoints
+DELETE
+tmp
+
+# files
+*_env
+*.pth
+*.ckpt
