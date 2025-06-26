@@ -12,7 +12,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QEvent
 from PyQt5.QtGui import QColor, QPen, QImage, QPixmap
-from src.ui.mask_selection_window import MaskSelectionWindow
 from src.controllers.image_loader import ImageLoader
 from src.controllers.point_manager import PointManager
 from src.controllers.segmenter import Segmenter
