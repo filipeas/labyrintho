@@ -19,7 +19,7 @@ class MainInterface(QMainWindow):
     def __init__(self, config, model, device):
         super().__init__()
         self.setWindowTitle("Minerva Segmenter - Seismic Facies Segmentation Tool")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 2000, 1400)
 
         self.device = device
         self.config = config

@@ -18,7 +18,7 @@ class HypothesesWindow(QWidget):
     def __init__(self, base_image, masks_logits, callback_on_select):
         super().__init__()
         self.setWindowTitle("Escolha uma hipótese")
-        self.resize(1500, 900)
+        self.resize(2000, 1400)
 
         self.layout = QHBoxLayout()
         self.setLayout(self.layout)
