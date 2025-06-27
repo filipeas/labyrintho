@@ -87,9 +87,28 @@ class SingleHypothesisFrame(QWidget):
             interpolation=cv2.INTER_NEAREST,
         )
 
-        overlay = self.original_image.copy()
+        # Normaliza imagem se necessário
+        base_image = self.original_image.copy()
+        if base_image.dtype != np.uint8:
+            base_image = base_image.astype(np.float32)
+            base_image -= base_image.min()
+            base_image /= max(base_image.max(), 1e-5)
+            base_image *= 255
+            base_image = base_image.astype(np.uint8)
+
+        if base_image.ndim == 2:
+            base_image = np.stack([base_image] * 3, axis=-1)
+
+        # Cria overlay transparente somente nas regiões da máscara
+        overlay = base_image.copy()
         overlay[resized_mask == 1] = [255, 0, 0]
-        combined = (0.5 * overlay + 0.5 * self.original_image).astype(np.uint8)
+
+        alpha = 0.5
+        combined = base_image.copy()
+        mask_indices = resized_mask == 1
+        combined[mask_indices] = (
+            alpha * overlay[mask_indices] + (1 - alpha) * base_image[mask_indices]
+        ).astype(np.uint8)
 
         # Aplica zoom
         if self.zoom != 1.0:
@@ -115,10 +134,19 @@ class SingleHypothesisFrame(QWidget):
             delta = event.angleDelta().y() // 120
 
             if modifiers & Qt.AltModifier:
-                # Ajusta threshold
-                self.threshold = round(
-                    np.clip(self.threshold + delta * 0.1, 0.0, 1.0), 1
-                )
+                # Ajusta threshold com passos variáveis
+                new_threshold = self.threshold
+
+                for _ in range(abs(delta)):
+                    step = 0.01 if 0 < new_threshold < 0.1 else 0.05
+                    if delta > 0:
+                        new_threshold += step
+                    else:
+                        new_threshold -= step
+
+                # Garante que o threshold não vá abaixo de zero
+                new_threshold = np.clip(new_threshold, 0.001, 1.0)  # evita exatamente 0
+                self.threshold = round(new_threshold, 3)
                 self.update_overlay()
                 return True
 

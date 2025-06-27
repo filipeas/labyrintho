@@ -1,6 +1,7 @@
 import sys
 import json
 import torch
+import argparse
 import traceback
 from pathlib import Path
 from PyQt5.QtGui import QPixmap, QPainter, QFont, QColor
@@ -18,8 +19,10 @@ class LoadModelThread(QThread):
     def __init__(
         self,
         conf_path: str = "src/settings/conf.json",
+        use_finetune: bool = True,
     ):
         super().__init__()
+        self.use_finetune = use_finetune
         try:
             with open(Path(conf_path), "r", encoding="utf-8") as f:
                 self.config = json.load(f)
@@ -54,20 +57,25 @@ class LoadModelThread(QThread):
             pixel_mean=self.config["pixel_mean"],
             pixel_std=self.config["pixel_std"],
         )
-        """ use this for load original SAM weights"""
-        # self.model = model_instantiator.create_model_and_load_backbone(
-        #     backbone_checkpoint_path=self.config["backbone_checkpoint_path"]
-        # ).to(device)
-        """ use this for load finetuned weights """
-        self.model = model_instantiator.load_model_from_checkpoint(
-            checkpoint_path=self.config["load_model_from_checkpoint"],
-            return_prediction_only=False
-        ).to(device)
+        if not self.use_finetune:
+            print("Usando pesos *originais SAM*")
+            """ use this for load original SAM weights"""
+            self.model = model_instantiator.create_model_and_load_backbone(
+                backbone_checkpoint_path=self.config["backbone_checkpoint_path"]
+            ).to(device)
+        else:
+            print("Usando pesos *finetune*")
+            """ use this for load finetuned weights """
+            self.model = model_instantiator.load_model_from_checkpoint(
+                checkpoint_path=self.config["load_model_from_checkpoint"],
+                return_prediction_only=False
+            ).to(device)
 
 
 class MainApp(QApplication):
-    def __init__(self, sys_argv):
+    def __init__(self, sys_argv, use_finetune=True):
         super().__init__(sys_argv)
+        self.use_finetune = use_finetune
 
         try:
             # Criar o splash com o título
@@ -77,7 +85,8 @@ class MainApp(QApplication):
 
             # Inicializa o carregamento do modelo em um thread separado
             self.model_loader_thread = LoadModelThread(
-                conf_path="src/settings/conf.json"
+                conf_path="src/settings/conf.json",
+                use_finetune=self.use_finetune
             )
             self.model_loader_thread.progress.connect(self.update_splash_progress)
             self.model_loader_thread.finished.connect(self.on_model_loaded)
@@ -162,5 +171,9 @@ class MainApp(QApplication):
 
 
 if __name__ == "__main__":
-    app = MainApp(sys.argv)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--use_finetune", action="store_true", help="Usar pesos finetunados")
+    args = parser.parse_args()
+
+    app = MainApp(sys.argv, use_finetune=args.use_finetune)
     sys.exit(app.exec_())
