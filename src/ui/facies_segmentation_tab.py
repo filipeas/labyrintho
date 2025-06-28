@@ -261,6 +261,12 @@ class FaciesSegmentationTab(QWidget):
             self.binary_mask = binary_mask
             self.update_mask_overlay()
 
+        def on_cancel():
+            self.undo_last_point()
+            for w in self.mask_windows:
+                w.close()
+            self.mask_windows.clear()
+
         # Fecha janelas anteriores e abre nova
         for w in self.mask_windows:
             w.close()
@@ -270,6 +276,9 @@ class FaciesSegmentationTab(QWidget):
             base_image=base_image,
             masks_logits=masks_logits[0],
             callback_on_select=on_select,
+            on_cancel=on_cancel,
+            points=self.point_manager.points.copy(),
+            prev_mask=self.binary_mask.copy() if self.binary_mask is not None else None,
         )
         window.show()
         self.mask_windows.append(window)

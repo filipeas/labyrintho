@@ -15,14 +15,26 @@ import cv2
 
 
 class HypothesesWindow(QWidget):
-    def __init__(self, base_image, masks_logits, callback_on_select):
+    def __init__(
+        self,
+        base_image,
+        masks_logits,
+        callback_on_select,
+        on_cancel,
+        points=None,
+        prev_mask=None,
+    ):
         super().__init__()
         self.setWindowTitle("Escolha uma hipótese")
-        self.resize(2000, 1400)
+        self.resize(2200, 1400)
 
         self.layout = QHBoxLayout()
         self.setLayout(self.layout)
 
+        self.points = points or []
+        self.prev_mask = prev_mask
+
+        self.frame_layout = QHBoxLayout()
         self.frames = []
         for idx in range(masks_logits.shape[0]):
             frame = SingleHypothesisFrame(
@@ -30,13 +42,30 @@ class HypothesesWindow(QWidget):
                 base_image_np=base_image,
                 mask_logit_tensor=masks_logits[idx],
                 callback_on_select=callback_on_select,
+                points=self.points,
+                prev_mask=self.prev_mask,
             )
             self.layout.addWidget(frame)
             self.frames.append(frame)
 
+        # Botão de cancelamento
+        self.cancel_button = QPushButton("Cancelar seleção de hipótese")
+        self.cancel_button.clicked.connect(on_cancel)
+
+        self.layout.addLayout(self.frame_layout)
+        self.layout.addWidget(self.cancel_button)
+
 
 class SingleHypothesisFrame(QWidget):
-    def __init__(self, index, base_image_np, mask_logit_tensor, callback_on_select):
+    def __init__(
+        self,
+        index,
+        base_image_np,
+        mask_logit_tensor,
+        callback_on_select,
+        points=None,
+        prev_mask=None,
+    ):
         super().__init__()
         self.index = index
         self.original_image = base_image_np
@@ -44,6 +73,9 @@ class SingleHypothesisFrame(QWidget):
         self.threshold = 0.5
         self.callback_on_select = callback_on_select
         self.zoom = 1.0
+
+        self.points = points or []
+        self.prev_mask = prev_mask
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
@@ -74,10 +106,9 @@ class SingleHypothesisFrame(QWidget):
         )
 
     def update_overlay(self):
-        # Atualiza título
         self.update_title()
 
-        # Gera máscara
+        # Gera máscara atual
         mask_prob = torch.sigmoid(self.mask_logit)
         binary_mask = (mask_prob > self.threshold).numpy().astype(np.uint8)
 
@@ -87,7 +118,6 @@ class SingleHypothesisFrame(QWidget):
             interpolation=cv2.INTER_NEAREST,
         )
 
-        # Normaliza imagem se necessário
         base_image = self.original_image.copy()
         if base_image.dtype != np.uint8:
             base_image = base_image.astype(np.float32)
@@ -99,18 +129,41 @@ class SingleHypothesisFrame(QWidget):
         if base_image.ndim == 2:
             base_image = np.stack([base_image] * 3, axis=-1)
 
-        # Cria overlay transparente somente nas regiões da máscara
-        overlay = base_image.copy()
-        overlay[resized_mask == 1] = [255, 0, 0]
-
-        alpha = 0.5
+        # Começa com cópia da imagem
         combined = base_image.copy()
+
+        # 1. Aplica máscara anterior em branco (transparente)
+        if self.prev_mask is not None:
+            prev_resized = cv2.resize(
+                self.prev_mask,
+                (base_image.shape[1], base_image.shape[0]),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            white_overlay = np.full_like(base_image, 255)
+            alpha_white = 0.3
+            mask_indices = prev_resized == 1
+            combined[mask_indices] = (
+                alpha_white * white_overlay[mask_indices]
+                + (1 - alpha_white) * combined[mask_indices]
+            ).astype(np.uint8)
+
+        # 2. Aplica máscara atual em vermelho (transparente)
+        red_overlay = np.zeros_like(base_image)
+        red_overlay[:, :, 0] = 255  # R=255
+        alpha_red = 0.5
         mask_indices = resized_mask == 1
         combined[mask_indices] = (
-            alpha * overlay[mask_indices] + (1 - alpha) * base_image[mask_indices]
+            alpha_red * red_overlay[mask_indices]
+            + (1 - alpha_red) * combined[mask_indices]
         ).astype(np.uint8)
 
-        # Aplica zoom
+        # 3. Desenha pontos por cima
+        for x, y, label in self.points:
+            color = (0, 255, 0) if label == 1 else (255, 0, 0)
+            radius = 4
+            cv2.circle(combined, (int(x), int(y)), radius, color, thickness=-1)
+
+        # 4. Aplica zoom se necessário
         if self.zoom != 1.0:
             combined = cv2.resize(
                 combined,
